@@ -117,6 +117,27 @@ class Transactions(models.Model):
             .format(self.created, self.transaction_type, self.transfer_from, self.transfer_to)
 
     @staticmethod
+    def get_transactions(account_name, start_datetime, end_datetime):
+        """
+        Gets present transactions of account for given timeframe. 
+        :param account_name: The account name which has to be in transaction. 
+        :param start_datetime: The start time of timeframe.
+        :param end_datetime: The end time of timeframe.
+        :return: Returns presented transactions between start time and end time.
+        """
+        acc = Accounts.get_account(account_name)
+
+        if isinstance(start_datetime, timezone.datetime) and isinstance(end_datetime, timezone.datetime):
+            if start_datetime > end_datetime:
+                raise ValueError("Start datetime is greater than end datetime. Query can't find any results,")
+
+        transactions = Transactions.objects.filter(Q(created__gte=start_datetime), Q(created__lte=end_datetime),
+                                                   Q(transfer_to__account__exact=acc) |
+                                                   Q(transfer_from__account__exact=acc),
+                                                   Q(transaction_type__exact="presentment"))
+        return transactions
+
+    @staticmethod
     def show_balances(account_name, time_threshold=timezone.now()):
         """
         Calculates ledger balance and available balance for given account.

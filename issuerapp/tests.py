@@ -3,6 +3,7 @@ from .models import Transactions, Accounts, Transfers
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from decimal import Decimal
+from pytz import UTC
 
 class AccountsTests(TestCase):
     SCHEME = "scheme"
@@ -56,7 +57,7 @@ class TransactionsTests(TestCase):
         Accounts.objects.create(cardholder=self.ISSUER, main_currency="EUR")
         Accounts.objects.create(cardholder=self.STUDENT, main_currency="EUR")
         Accounts.objects.create(cardholder=self.MILLIONAIRE, main_currency="EUR")
-        self.test_datetime = timezone.datetime(2018, 10, 10, 10, 10, 10, 10)
+        self.test_datetime = timezone.datetime(2018, 10, 10, 10, 10, 10, 10, tzinfo=UTC)
 
     def test_create_transaction_is_successful(self):
         """
@@ -161,3 +162,35 @@ class TransactionsTests(TestCase):
         self.__create_test_transactions()
         with self.assertRaises(Accounts.DoesNotExist):
             Transactions.show_balances("invalid")
+
+    def test_get_transactions_successfully(self):
+        self.__create_test_transactions()
+        ten_seconds = timezone.timedelta(seconds=10)
+        start_time = self.test_datetime - ten_seconds
+        end_time =  self.test_datetime + ten_seconds
+        transactions = Transactions.get_transactions(self.ISSUER, start_time, end_time)
+        self.assertEqual(transactions.count(), 1)
+
+        #create more transactions. There should be 5 valid transactions now but 3 in given timeframe.
+        times = [start_time, end_time, start_time - ten_seconds, end_time + ten_seconds ]
+        for time in times:
+            transaction = self.__create_test_transaction(self.MILLIONAIRE, self.ISSUER,
+                                                         transaction_type="presentment", amount=100000)
+            transaction.created = time
+            transaction.save()
+
+        transactions = Transactions.get_transactions(self.ISSUER, start_time, end_time)
+        self.assertEqual(transactions.count(), 3)
+
+    def test_get_transactions_invalid_parameters(self):
+        self.__create_test_transactions()
+        ten_seconds = timezone.timedelta(seconds=10)
+        with self.assertRaises(ValidationError):
+            Transactions.get_transactions(self.ISSUER, "should_be_time", self.test_datetime)
+        with self.assertRaises(ValidationError):
+            Transactions.get_transactions(self.ISSUER, self.test_datetime, "should_be_time")
+        with self.assertRaises(Accounts.DoesNotExist):
+            Transactions.get_transactions("unknown", self.test_datetime, self.test_datetime)
+        #end time is less than start time
+        with self.assertRaises(ValueError):
+            Transactions.get_transactions(self.ISSUER, self.test_datetime, self.test_datetime - ten_seconds)
