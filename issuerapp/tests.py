@@ -105,7 +105,7 @@ class TransactionsTests(TestCase):
 
     def test_ledger_balance_is_successful(self):
         """
-         Tests if getting ledger balance is successful.
+        Tests if getting ledger balance is successful.
         """
         self.__create_test_transactions()
 
@@ -130,6 +130,34 @@ class TransactionsTests(TestCase):
         with self.assertRaises(ValidationError):
             Transactions.get_ledger_balance(self.ISSUER, time_threshold="time")
 
+    def test_get_available_balance_successful(self):
+        """
+        Tests if getting available balance is successful.
+        """
+        self.__create_test_transactions()
 
+        balance = Transactions.get_available_balance(self.ISSUER)
+        self.assertEqual(balance["available_balance"], "-99800.00")
+        balance = Transactions.get_available_balance(self.STUDENT)
+        self.assertEqual(balance["available_balance"], "-200.00")
+        balance = Transactions.get_available_balance(self.MILLIONAIRE)
+        self.assertEqual(balance["available_balance"], "100000.00")
 
+    def test_get_available_balance_invalid_parameter(self):
+        """
+        Tests that unknown account name throws an exception.
+        """
+        self.__create_test_transactions()
+        with self.assertRaises(Accounts.DoesNotExist):
+            Transactions.get_available_balance("wrong")
 
+    def test_show_balance_successful(self):
+        self.__create_test_transactions()
+        balances = Transactions.show_balances(self.ISSUER)
+        self.assertEqual(balances["available_balance"], "-99800.00")
+        self.assertEqual(balances["ledger_balance"], "-100000.00")
+
+    def test_show_balance_invalid_account(self):
+        self.__create_test_transactions()
+        with self.assertRaises(Accounts.DoesNotExist):
+            Transactions.show_balances("invalid")

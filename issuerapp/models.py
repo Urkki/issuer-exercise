@@ -121,10 +121,14 @@ class Transactions(models.Model):
         """
         Calculates ledger balance and available balance for given account.
         :param account_name: The name of account to get balance
-        :param time_threshold: Time threshold. Balance before this is given.
-        :return: ledger balance and available balance as in dictionary format. 
+        :param time_threshold: Time threshold. Balance before or equal this time threshold is given.
+        :return: ledger balance and available balance in dictionary format. 
         """
         ledger_balance = Transactions.get_ledger_balance(account_name, time_threshold)
+        available_balance = Transactions.get_available_balance(account_name)
+        #merge dictionaries
+        balances = {**ledger_balance, **available_balance}
+        return balances
 
     @staticmethod
     def get_ledger_balance(account_name, time_threshold=timezone.now()):
@@ -143,7 +147,21 @@ class Transactions(models.Model):
         transactions_to = Transactions.objects.filter(Q(created__lte=time_threshold),
                                                       Q(transfer_to__account__exact=acc),
                                                       Q(transaction_type__exact="presentment"),
-                                                      Q(transfer_from__currency__iexact=acc.main_currency))
+                                                      Q(transfer_to__currency__iexact=acc.main_currency))
+        ledger_balance = Transactions.calculate_balance(transactions_from, transactions_to)
+        balance = {
+            "ledger_balance": str(ledger_balance)
+        }
+        return balance
+
+    @staticmethod
+    def calculate_balance(transactions_from, transactions_to):
+        """
+        Calculates balance between debit and credit transactions.
+        :param transactions_from: Debit transactions of selected account. 
+        :param transactions_to: Credit transactions of selected account.
+        :return: Balance
+        """
         debit_amount = 0
         credit_amount = 0
         # debit transfer
@@ -153,8 +171,27 @@ class Transactions(models.Model):
         for transaction in transactions_to:
             credit_amount += transaction.transfer_to.amount
 
-        ledger_balance = credit_amount - debit_amount
+        balance = credit_amount - debit_amount
+        return balance
+
+    @staticmethod
+    def get_available_balance(account_name):
+        """
+        Calculates available balance for given account.
+        :param account_name: The account name.
+        :return: Returns a dictionary with "available_balance" key.
+        """
+        acc = Accounts.get_account(account_name)
+        transactions_from = Transactions.objects.filter(Q(transfer_from__account__exact=acc),
+                                                        Q(transaction_type__exact="presentment") |
+                                                        Q(transaction_type__exact="authorization"),
+                                                        Q(transfer_from__currency__iexact=acc.main_currency))
+        transactions_to = Transactions.objects.filter(Q(transfer_to__account__exact=acc),
+                                                      Q(transaction_type__exact="presentment") |
+                                                      Q(transaction_type__exact="authorization"),
+                                                      Q(transfer_to__currency__iexact=acc.main_currency))
+        available_balance = Transactions.calculate_balance(transactions_from, transactions_to)
         balance = {
-            "ledger_balance": str(ledger_balance)
+            "available_balance": str(available_balance)
         }
         return balance

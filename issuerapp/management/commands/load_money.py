@@ -25,4 +25,3 @@ class Command(BaseCommand):
                                                  .format(amount, currency, cardholder_account.cardholder)))
         except Exception as e:
             self.stdout.write(self.style.ERROR("Transfer FAILED! Error: {0}".format(e)))
-            pass
