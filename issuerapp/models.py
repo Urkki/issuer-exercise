@@ -1,79 +1,116 @@
 from django.db import models
 from django.utils import timezone
 from django.db.models import Q
-from json import dumps
+from django.core.validators import MinValueValidator
+from moneyed import CURRENCIES_BY_ISO
+from decimal import Decimal
 
-TRANSFER_TYPES = {
+#create currency tuples for validating database fields.
+CURRENCIES = [ (value.code, value.code) for value in CURRENCIES_BY_ISO.values()]
+
+TRANSFER_TYPES = (
     ("credit", "credit"),
     ("debit",  "debit")
-}
-TRANSACTION_TYPES = {
+)
+TRANSACTION_TYPES = (
     ("authorization", "authorization"),
     ("presentment", "presentment"),
     ("settlement", "settlement")
-}
+)
 
 ISSUER_NAME = "issuer"
 
 #Accounts (holds monetary value in some currency)
 class Accounts(models.Model):
     cardholder = models.CharField(max_length=50, primary_key=True)
-    main_currency = models.CharField(max_length=3)
+    main_currency = models.CharField(choices=CURRENCIES, max_length=3, default="EUR")
 
-    ''' Gets existing account if it exists. Otherwise a new account is created. '''
     @staticmethod
-    def get_account(cardholder_name):
+    def get_account(cardholder_name, can_create_new_account=False):
+        """
+        Gets an account.
+        :param cardholder_name: The name of the account owner.
+        :param can_create_new_account: If existing account is not found, the can_create_new_account boolean parameter 
+        determines if a new account can be created. The default currency is applied.
+        :return: Returns created or existing account.
+        """
         if Accounts.objects.filter(pk=cardholder_name).exists():
             account = Accounts.objects.get(pk=cardholder_name)
             return account
-        else:
+        elif can_create_new_account:
             # create a new account and save it.
             new_account = Accounts(cardholder=cardholder_name)
             new_account.save()
             return new_account
+        else:
+            raise Accounts.DoesNotExist("The account \"{}\" does not exist.".format(cardholder_name))
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super(Accounts, self).save(*args, **kwargs)
 
     def __str__(self):
         return  "{}".format(self.cardholder)
 
 #Transfers (representing a debit or credit)
 class Transfers(models.Model):
-    transfer_type = models.CharField(choices=sorted(TRANSFER_TYPES), max_length=6)
-    currency = models.CharField(max_length=3)
-    amount = models.DecimalField(decimal_places=2, max_digits=99)
-    account = models.ForeignKey(Accounts, on_delete=models.PROTECT)
+    transfer_type = models.CharField(choices=TRANSFER_TYPES, blank=False, max_length=6)
+    currency = models.CharField(choices=CURRENCIES, max_length=3, blank=False)
+    amount = models.DecimalField(decimal_places=2, max_digits=14, blank=False,
+                                 validators=[MinValueValidator(Decimal('0.01'))]) # could use django-money
+    account = models.ForeignKey(Accounts, on_delete=models.PROTECT, blank=False)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super(Transfers, self).save(*args, **kwargs)
 
     def __str__(self):
         return "{} {} {} {}".format(self.transfer_type, self.amount,  self.currency, self.account)
 
 #Transactions (bundles a number of transfers to represent movement of value between accounts)
 class Transactions(models.Model):
-    transfer_from = models.ForeignKey(Transfers, on_delete=models.CASCADE, related_name="transfer_from")
-    transfer_to = models.ForeignKey(Transfers, on_delete=models.CASCADE, related_name="transfer_to")
-    transaction_type = models.CharField(choices=sorted(TRANSACTION_TYPES), max_length=13)
-    created = models.DateTimeField("time when transaction was created.",default=timezone.now)
+    transfer_from = models.ForeignKey(Transfers, on_delete=models.CASCADE, related_name="transfer_from", blank=False)
+    transfer_to = models.ForeignKey(Transfers, on_delete=models.CASCADE, related_name="transfer_to", blank=False)
+    transaction_type = models.CharField(choices=TRANSACTION_TYPES, max_length=13, blank=False)
+    created = models.DateTimeField("time when transaction was created.",default=timezone.now, blank=False)
 
     @staticmethod
     def create_transaction(debit_account, credit_account, transaction_type, currency, amount):
-        debit_transfer = Transfers(transfer_type="debit", currency=currency, amount=amount, account=debit_account)
-        credit_transfer = Transfers(transfer_type="credit", currency=currency, amount=amount, account=credit_account)
+        """
+        Creates a transaction and saves it into database.
+        :param debit_account: The account model where the money is taken.
+        :param credit_account: The account where the money is given.
+        :param transaction_type: The type of transaction. Possible values are "authorization", "presentment" or 
+        "settlement"
+        :param currency: Currency in ISO character format. 
+        :param amount: Transaction amount. The minimum amount is 0.01
+        :return: Returns the created transaction.
+        """
+        debit_transfer = Transfers(transfer_type="debit", currency=currency, amount=str(amount), account=debit_account)
+        credit_transfer = Transfers(transfer_type="credit", currency=currency, amount=str(amount), account=credit_account)
 
+        debit_transfer.save()
         try:
-            debit_transfer.save()
             credit_transfer.save()
-            #create transaction here because transfers had to be saved before we can reference them.
-            transaction = Transactions(transfer_from=debit_transfer, transfer_to=credit_transfer,
-                                       transaction_type=transaction_type)
+        except Exception as e:
+            debit_transfer.delete()
+            raise e
+
+        # create transaction here because transfers had to be saved before we can reference them.
+        transaction = Transactions(transfer_from=debit_transfer, transfer_to=credit_transfer,
+                                   transaction_type=transaction_type)
+        try:
             transaction.save()
             return transaction
         except Exception as e:
-            #if this fails. delete objects.
-            if not debit_transfer.id is None:
-                debit_transfer.delete()
-            if not credit_transfer.id is None:
-                credit_transfer.delete()
-            if not transaction.id is None:
-                transaction.delete()
+            #if transaction saving fails, delete created transfers
+            credit_transfer.save()
+            debit_transfer.delete()
             raise e
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super(Transactions, self).save(*args, **kwargs)
 
     def __str__(self):
         return "{0} {1} from: {2} to: {3}"\
@@ -85,7 +122,7 @@ class Transactions(models.Model):
         Calculates ledger balance and available balance for given account.
         :param account_name: The name of account to get balance
         :param time_threshold: Time threshold. Balance before this is given.
-        :return: ledger balance and available balance as in JSON format. 
+        :return: ledger balance and available balance as in dictionary format. 
         """
         ledger_balance = Transactions.get_ledger_balance(account_name, time_threshold)
 
@@ -95,7 +132,7 @@ class Transactions(models.Model):
         Calculates ledger balance for given account.
         :param account_name: The name of account to get ledger balance
         :param time_threshold: Time threshold. 
-        :return: ledger balance in JSON format. 
+        :return: ledger balance as in dictionary format. 
         """
 
         acc = Accounts.get_account(account_name)
@@ -117,11 +154,7 @@ class Transactions(models.Model):
             credit_amount += transaction.transfer_to.amount
 
         ledger_balance = credit_amount - debit_amount
-        balance_json = {
+        balance = {
             "ledger_balance": str(ledger_balance)
         }
-        #print("Ledger debit: {} credit: {} balance: {}".format(debit_amount, credit_amount, ledger_balance))
-        return dumps(balance_json)
-
-
-
+        return balance
