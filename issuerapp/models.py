@@ -20,8 +20,11 @@ TRANSACTION_TYPES = (
 
 ISSUER_NAME = "issuer"
 
-#Accounts (holds monetary value in some currency)
 class Accounts(models.Model):
+    """
+    Represents an account of cardholder with assumption that cardholder can have one account. 
+    Cardholder field can be considered as card_id. 
+    """
     cardholder = models.CharField(max_length=50, primary_key=True)
     main_currency = models.CharField(choices=CURRENCIES, max_length=3, default="EUR")
 
@@ -52,8 +55,15 @@ class Accounts(models.Model):
     def __str__(self):
         return  "{}".format(self.cardholder)
 
-#Transfers (representing a debit or credit)
 class Transfers(models.Model):
+    """
+    Transfers model represents a debit or credit transfer.
+        Fields:
+        - transfer_type: credit or debit
+        - currency: ISO standard char sequence.
+        - amount: Transfer amount.
+        - account: A reference to related account where transfer was performed.
+    """
     transfer_type = models.CharField(choices=TRANSFER_TYPES, blank=False, max_length=6)
     currency = models.CharField(choices=CURRENCIES, max_length=3, blank=False)
     amount = models.DecimalField(decimal_places=2, max_digits=14, blank=False,
@@ -67,8 +77,15 @@ class Transfers(models.Model):
     def __str__(self):
         return "{} {} {} {}".format(self.transfer_type, self.amount,  self.currency, self.account)
 
-#Transactions (bundles a number of transfers to represent movement of value between accounts)
 class Transactions(models.Model):
+    """
+    Transactions model groups debit and credit transfers between accounts.  
+        Fields:
+        - transfer_from: A debit Transfer. The funds are deducted from this account.
+        - transfer_to: A credit Transfer. The funds are added to this account.
+        - transaction_type: The type of transaction. Possible values: authorization, presentment and settlement.
+        - created: A timestamp when transaction was created. 
+    """
     transfer_from = models.ForeignKey(Transfers, on_delete=models.CASCADE, related_name="transfer_from", blank=False)
     transfer_to = models.ForeignKey(Transfers, on_delete=models.CASCADE, related_name="transfer_to", blank=False)
     transaction_type = models.CharField(choices=TRANSACTION_TYPES, max_length=13, blank=False)
