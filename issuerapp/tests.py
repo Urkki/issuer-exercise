@@ -194,3 +194,60 @@ class TransactionsTests(TestCase):
         #end time is less than start time
         with self.assertRaises(ValueError):
             Transactions.get_transactions(self.ISSUER, self.test_datetime, self.test_datetime - ten_seconds)
+
+class AuthorizationWebhookTests(TestCase):
+
+    STUDENT = "student"
+    ISSUER = "issuer"
+
+    AUTH_DATA_OK = {
+        "type": "authorization",
+        "card_id": STUDENT,
+        "transaction_id": "1234ZORRO",
+        "merchant_name": "SNEAKERS R US",
+        "merchant_country": "US",
+        "merchant_mcc": "5139",
+        "billing_amount": "90.00",
+        "billing_currency": "EUR",
+        "transaction_amount": "100.00",
+        "transaction_currency": "USD"
+    }
+
+    AUTH_DATA_NOK = {
+        "type": "authorization",
+        "card_id": STUDENT,
+        "transaction_id": "1234ZORRO",
+        "merchant_name": "SNEAKERS R US",
+        "merchant_country": "US",
+        "merchant_mcc": "5139",
+        "billing_amount": "90000.00",
+        "billing_currency": "EUR",
+        "transaction_amount": "100000.00",
+        "transaction_currency": "USD"
+    }
+
+    def setUp(self):
+        Accounts.objects.create(cardholder=self.ISSUER, main_currency="EUR")
+        Accounts.objects.create(cardholder=self.STUDENT, main_currency="EUR")
+        issuer_account = Accounts.objects.get(cardholder=self.ISSUER)
+        student_account = Accounts.objects.get(cardholder=self.STUDENT)
+        Transactions.create_transaction(issuer_account, student_account,
+                                                      transaction_type="presentment", currency="EUR", amount=1111.11)
+        Transactions.create_transaction(issuer_account, student_account,
+                                                      transaction_type="presentment", currency="EUR", amount=21.96)
+        Transactions.create_transaction(student_account, issuer_account,
+                                                      transaction_type="authorization", currency="EUR", amount=51.55)
+        #the student should have 1111.11 + 21.96 - 51.55 = 1081.52 EUR
+
+    def test_authorization_webhook_successful(self):
+        response = self.client.get("/api/authorization", self.AUTH_DATA_OK)
+        self.assertIn(r"991.52", str(response.content))
+        self.assertEqual(response.status_code, 200)
+
+    def test_authorization_webhook_not_enough_funds(self):
+        response = self.client.get("/api/authorization", self.AUTH_DATA_NOK)
+        self.assertEqual(response.status_code, 403)
+
+    def test_authorization_webhook_invalid_request(self):
+        response = self.client.get("/api/authorization")
+        self.assertEqual(response.status_code, 400)
