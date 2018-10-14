@@ -67,10 +67,11 @@ class TransactionsTests(TestCase):
         debit_account = Accounts.objects.get(cardholder=self.ISSUER)
         credit_account = Accounts.objects.get(cardholder=self.MILLIONAIRE)
         transaction = Transactions.create_transaction(debit_account, credit_account, transaction_type="authorization",
-                                                      currency="EUR", amount=0.01)
+                                                      currency="EUR", amount=0.01, transaction_id="t_id123")
         self.assertIs(type(transaction), Transactions) # right type is returned
         self.assertIn(transaction, Transactions.objects.all()) # transaction is saved
         self.assertEqual(transaction.transaction_type, "authorization")  # correct transaction_type
+        self.assertEqual(transaction.transaction_id, "t_id123")  # correct transaction_id
 
         self.assertIs(transaction.transfer_from.account, debit_account) # transfer object has a right account
         self.assertEqual(transaction.transfer_from.amount, Decimal('0.01'))  # transfer object has a right amount

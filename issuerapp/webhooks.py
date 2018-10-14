@@ -20,7 +20,7 @@ def authorization(request):
             cardholder_account = Accounts.get_account(cardholder)
             issuer_account =  Accounts.get_account(ISSUER_NAME)
             Transactions.create_transaction(cardholder_account, issuer_account, "authorization", currency,
-                                            billing_amount)
+                                            billing_amount, transaction_id=request.GET["transaction_id"])
             return HttpResponse('balance after transaction: {}'.format(balance_amount_after), status=200)  # OK
         else:
             return HttpResponse('The payment is declined.', status=403)  # Forbidden

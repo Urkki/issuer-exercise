@@ -81,18 +81,20 @@ class Transactions(models.Model):
     """
     Transactions model groups debit and credit transfers between accounts.  
         Fields:
+        - transaction_id: It is used to identify authorization and presentment transactions.
         - transfer_from: A debit Transfer. The funds are deducted from this account.
         - transfer_to: A credit Transfer. The funds are added to this account.
         - transaction_type: The type of transaction. Possible values: authorization, presentment and settlement.
         - created: A timestamp when transaction was created. 
     """
+    transaction_id = models.CharField(max_length=20, blank=True)
     transfer_from = models.ForeignKey(Transfers, on_delete=models.CASCADE, related_name="transfer_from", blank=False)
     transfer_to = models.ForeignKey(Transfers, on_delete=models.CASCADE, related_name="transfer_to", blank=False)
     transaction_type = models.CharField(choices=TRANSACTION_TYPES, max_length=13, blank=False)
     created = models.DateTimeField("time when transaction was created.",default=timezone.now, blank=False)
 
     @staticmethod
-    def create_transaction(debit_account, credit_account, transaction_type, currency, amount):
+    def create_transaction(debit_account, credit_account, transaction_type, currency, amount, transaction_id=""):
         """
         Creates a transaction and saves it into database.
         :param debit_account: The account model where the money is taken.
@@ -101,6 +103,7 @@ class Transactions(models.Model):
         "settlement"
         :param currency: Currency in ISO character format. 
         :param amount: Transaction amount. The minimum amount is 0.01
+        :param transaction_id: Optional parameter for identifying transactions.
         :return: Returns the created transaction.
         """
         debit_transfer = Transfers(transfer_type="debit", currency=currency, amount=str(amount), account=debit_account)
@@ -115,7 +118,7 @@ class Transactions(models.Model):
 
         # create transaction here because transfers had to be saved before we can reference them.
         transaction = Transactions(transfer_from=debit_transfer, transfer_to=credit_transfer,
-                                   transaction_type=transaction_type)
+                                   transaction_type=transaction_type, transaction_id=transaction_id)
         try:
             transaction.save()
             return transaction
@@ -130,8 +133,8 @@ class Transactions(models.Model):
         return super(Transactions, self).save(*args, **kwargs)
 
     def __str__(self):
-        return "{0} {1} from: {2} to: {3}"\
-            .format(self.created, self.transaction_type, self.transfer_from, self.transfer_to)
+        return "{0} {1} from: {2} to: {3} t_id: {4}"\
+            .format(self.created, self.transaction_type, self.transfer_from, self.transfer_to, self.transaction_id)
 
     @staticmethod
     def get_transactions(account_name, start_datetime, end_datetime):
