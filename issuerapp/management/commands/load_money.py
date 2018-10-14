@@ -15,8 +15,8 @@ class Command(BaseCommand):
         currency = options['currency']
         #TODO: should check arguments here
         
-        issuer_account = Accounts.get_account(ISSUER_NAME)
-        cardholder_account = Accounts.get_account(cardholder)
+        issuer_account = Accounts.get_account(ISSUER_NAME, can_create_new_account=True)
+        cardholder_account = Accounts.get_account(cardholder, can_create_new_account=True)
 
         try:
             Transactions.create_transaction(debit_account=issuer_account, credit_account=cardholder_account,
