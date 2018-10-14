@@ -1,5 +1,5 @@
 from django.http import HttpResponse
-from .models import Transactions, Accounts, ISSUER_NAME
+from .models import Transactions, Accounts, ISSUER_NAME, SCHEME_NAME
 from decimal import Decimal
 
 def authorization(request):
@@ -28,4 +28,16 @@ def authorization(request):
         return HttpResponse('Unknown error', status=400) # Bad Request
 
 def presentment(request):
-    return HttpResponse('presentment')
+    try:
+        transaction = Transactions.objects.get(transaction_id=request.GET["transaction_id"])
+        transaction.transaction_type = "presentment"
+        transaction.save()
+        #create debt to the scheme
+        issuer_account = Accounts.get_account(ISSUER_NAME)
+        scheme_account = Accounts.get_account(SCHEME_NAME)
+        currency = request.GET["settlement_currency"]
+        amount = request.GET["settlement_amount"]
+        Transactions.create_transaction(issuer_account, scheme_account, "settlement", currency, amount)
+        return HttpResponse('Presentment successful', status=200)  # OK
+    except:
+        return HttpResponse('Unknown error', status=400) # Bad Request

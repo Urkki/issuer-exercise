@@ -8,3 +8,4 @@ To run unit tests, use `python manage.py test` command.
 | URL | METHOD | Description |
 | ------ | ------ | ------ |
 |/api/authorization | GET | Used for handling authorization messages. |
+|/api/presentment | GET | Used for handling presentment messages. |

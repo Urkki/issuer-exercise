@@ -19,6 +19,7 @@ TRANSACTION_TYPES = (
 )
 
 ISSUER_NAME = "issuer"
+SCHEME_NAME = "scheme"
 
 class Accounts(models.Model):
     """

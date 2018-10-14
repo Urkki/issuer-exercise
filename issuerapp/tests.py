@@ -252,3 +252,63 @@ class AuthorizationWebhookTests(TestCase):
     def test_authorization_webhook_invalid_request(self):
         response = self.client.get("/api/authorization")
         self.assertEqual(response.status_code, 400)
+
+class PresentmentWebhookTests(TestCase):
+    STUDENT = "student"
+    ISSUER = "issuer"
+    SCHEME_NAME = "scheme"
+
+
+    PRESENT_DATA_OK ={
+        "type": "presentment",
+        "card_id": STUDENT,
+        "transaction_id": "1234ZORRO",
+        "merchant_name": "SNEAKERS R US",
+        "merchant_city": "LOS ANGELES",
+        "merchant_country": "US",
+        "merchant_mcc": "5139",
+        "billing_amount": "91.00",
+        "billing_currency": "EUR",
+        "transaction_amount": "100.00",
+        "transaction_currency": "USD",
+        "settlement_amount": "90.50",
+        "settlement_currency": "EUR"
+    }
+
+    PRESENT_DATA_NOK = {
+        "type": "presentment",
+        "card_id": STUDENT,
+        "transaction_id": "1234ZORRO2",
+        "merchant_name": "SNEAKERS R US",
+        "merchant_city": "LOS ANGELES",
+        "merchant_country": "US",
+        "merchant_mcc": "5139",
+        "billing_amount": "91.00",
+        "billing_currency": "EUR",
+        "transaction_amount": "100.00",
+        "transaction_currency": "USD",
+        "settlement_amount": "90.50",
+        "settlement_currency": "EUR"
+    }
+
+    def setUp(self):
+        Accounts.objects.create(cardholder=self.ISSUER, main_currency="EUR")
+        Accounts.objects.create(cardholder=self.STUDENT, main_currency="EUR")
+        Accounts.objects.create(cardholder=self.SCHEME_NAME, main_currency="EUR")
+        issuer_account = Accounts.objects.get(cardholder=self.ISSUER)
+        student_account = Accounts.objects.get(cardholder=self.STUDENT)
+        Transactions.create_transaction(issuer_account, student_account, transaction_type="presentment",
+                                        currency="EUR", amount=1111.11)
+        Transactions.create_transaction(issuer_account, student_account, transaction_type="presentment",
+                                        currency="EUR", amount=21.96)
+        Transactions.create_transaction(student_account, issuer_account, transaction_type="authorization",
+                                        currency="EUR", amount=51.55, transaction_id="1234ZORRO")
+        # the student should have 1111.11 + 21.96 - 51.55 = 1081.52 EUR
+
+    def test_presentment_webhook_successful(self):
+        response = self.client.get("/api/presentment", self.PRESENT_DATA_OK)
+        self.assertEqual(response.status_code, 200)
+
+    def test_presentment_webhook_invalid_transaction_id(self):
+        response = self.client.get("/api/presentment", self.PRESENT_DATA_NOK)
+        self.assertEqual(response.status_code, 400)
