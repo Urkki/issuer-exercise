@@ -3,6 +3,13 @@ A demonstration of issuer in banking process. This project is developed with Pyt
 To load money for account, go to project root directory and use command: `python manage.py load_money <account_name> <amount> <currency>`.
 To run unit tests, use `python manage.py test` command.
 
+
+This project uses following Python packages:
+
+* Django
+* py-moneyed 
+* pytz
+
 ### API endpoints
 
 | URL | METHOD | Description |
