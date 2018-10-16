@@ -9,10 +9,11 @@ This project uses following Python packages:
 * Django
 * py-moneyed 
 * pytz
+* djangorestframework
 
 ### API endpoints
 
 | URL | METHOD | Description |
 | ------ | ------ | ------ |
-|/api/authorization | GET | Used for handling authorization messages. |
-|/api/presentment | GET | Used for handling presentment messages. |
+|/api/authorization | POST | Used for handling authorization messages. |
+|/api/presentment | POST | Used for handling presentment messages. |

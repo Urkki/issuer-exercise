@@ -241,16 +241,16 @@ class AuthorizationWebhookTests(TestCase):
         #the student should have 1111.11 + 21.96 - 51.55 = 1081.52 EUR
 
     def test_authorization_webhook_successful(self):
-        response = self.client.get("/api/authorization", self.AUTH_DATA_OK)
+        response = self.client.post("/api/authorization", self.AUTH_DATA_OK)
         self.assertIn(r"991.52", str(response.content))
         self.assertEqual(response.status_code, 200)
 
     def test_authorization_webhook_not_enough_funds(self):
-        response = self.client.get("/api/authorization", self.AUTH_DATA_NOK)
+        response = self.client.post("/api/authorization", self.AUTH_DATA_NOK)
         self.assertEqual(response.status_code, 403)
 
     def test_authorization_webhook_invalid_request(self):
-        response = self.client.get("/api/authorization")
+        response = self.client.post("/api/authorization")
         self.assertEqual(response.status_code, 400)
 
 class PresentmentWebhookTests(TestCase):
@@ -306,9 +306,9 @@ class PresentmentWebhookTests(TestCase):
         # the student should have 1111.11 + 21.96 - 51.55 = 1081.52 EUR
 
     def test_presentment_webhook_successful(self):
-        response = self.client.get("/api/presentment", self.PRESENT_DATA_OK)
+        response = self.client.post("/api/presentment", self.PRESENT_DATA_OK)
         self.assertEqual(response.status_code, 200)
 
     def test_presentment_webhook_invalid_transaction_id(self):
-        response = self.client.get("/api/presentment", self.PRESENT_DATA_NOK)
+        response = self.client.post("/api/presentment", self.PRESENT_DATA_NOK)
         self.assertEqual(response.status_code, 400)
